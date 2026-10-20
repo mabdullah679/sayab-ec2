@@ -22,7 +22,7 @@ What went wrong on the way and how it was solved
 1. The first deploy failed because the account is not allowed more than 8 virtual CPUs on regular servers and other projects were using all of them. Solved by using Spot servers, which have their own allowance and cost less. The catch is that AWS can take a Spot server back.
 2. The next deploy started the server but the app would not start. The bootstrap built the Python environment in a temporary folder and then moved it, which broke it. It now builds in place.
 3. Servers were missing the project tags. Fixed.
-4. The 5xx alarm was still in alarm state when last checked. It was set off by errors during the failed attempts above. No new errors have appeared since. It is expected to clear by itself, but that was not watched.
+4. The 5xx alarm went off because of errors during the failed attempts above. It returned to OK by itself about an hour later, with no new errors in between.
 
 What was checked on the live site (2026-10-20)
 The health pages answered OK, the greeting worked, a script-tag name was shown as plain text, a too-long name was refused, and the safety headers were present. The automatic smoke test printed SMOKE PASSED.
