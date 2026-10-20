@@ -4,7 +4,7 @@ What this is
 A tiny website. You type your name, press Enter, and it shows a greeting. The original was a hobby project that only ran by hand on one computer. It is now set up to run on Amazon's cloud (AWS) and to update itself whenever new code is pushed to the branch called prod-hardening.
 
 Why the repository was so big
-Someone saved a whole home folder from a server into the repository by accident. That is about 21,000 files: download caches, bash history, and SSH keys. They have been removed from the current version and blocked from coming back. They are still in the old history. One of them is a private SSH key. It should be treated as stolen and replaced. The history was not rewritten.
+Someone saved a whole home folder from a server into the repository by accident. That is about 11,200 files: download caches, bash history, and SSH keys. They have been removed from the current version and blocked from coming back. They are still in the old history. One of them is a private SSH key. It should be treated as stolen and replaced. The history was not rewritten.
 
 What was fixed in the website
 1. If you typed code as your name, the page would run it. That is a real security hole. It is fixed and a test proves it.

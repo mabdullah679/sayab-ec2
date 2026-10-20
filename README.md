@@ -95,13 +95,13 @@ ruff check . && ruff format --check . && pytest -q
 
 ## Design decisions
 
-- **Release tarball in S3 instead of `git clone` on the instance.** The repository history is about 190 MB (see below); cloning it at boot would be slow and would pull a private key onto the box. The instance downloads a ~4 KB tarball keyed by commit SHA.
+- **Release tarball in S3 instead of `git clone` on the instance.** The repository history is about 190 MB (see below); cloning it at boot would be slow and would pull a private key onto the box. The instance downloads a ~7 KB tarball keyed by commit SHA.
 - **ALB + ASG of 1 rather than a lone instance with an Elastic IP.** The ALB gives a stable DNS name, a health check that actually exercises `/readyz`, and lets the ASG replace the instance with launch-before-terminate (observed: zero 5xx during the final refresh). It costs about 2.5 cents an hour; an Elastic IP would need user-data association and gives no health-based replacement.
 - **Spot.** The account's On-Demand "Standard" vCPU quota (8) was fully used by other instances (the first launch failed with `VcpuLimitExceeded`); Spot has its own quota and is cheaper. The trade-off is that AWS can reclaim the instance; the ASG then replaces it (about 2-4 minutes of downtime with one instance).
 - **No NAT gateway.** Instances sit in public subnets with a security group that only accepts port 8000 from the ALB; outbound is limited to 80/443. No SSH, access is SSM Session Manager.
 - **Plain HTTP only.** No domain or certificate exists, so there is no HTTPS listener. The page collects only a first name, but this is not production-grade transport security.
 - **venv built in its final path.** An earlier bootstrap built it in a temp directory and renamed it; the shebang pointed at the old path and systemd failed with 203/EXEC. A `.complete` marker now makes half-built installs get redone.
-- **Why the repo was 190 MB.** It tracked an entire EC2 home directory: about 21,000 files (npm cache, pip cache, virtualenv wheels, `.bash_history`, `.ssh/`). This branch untracks them and `.gitignore` blocks them; CI fails if they reappear. The files are still in git history. The history contains a private SSH key (`.ssh/id_ed25519`); treat it as compromised and rotate it. History was not rewritten.
+- **Why the repo was 190 MB.** It tracked an entire EC2 home directory: about 11,200 files (npm cache, pip cache, virtualenv wheels, `.bash_history`, `.ssh/`). This branch untracks them and `.gitignore` blocks them; CI fails if they reappear. The files are still in git history. The history contains a private SSH key (`.ssh/id_ed25519`); treat it as compromised and rotate it. History was not rewritten.
 
 ## Deployed on AWS
 
