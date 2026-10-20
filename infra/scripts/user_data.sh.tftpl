@@ -17,15 +17,19 @@ id sayab >/dev/null 2>&1 || useradd --system --home-dir "$APP_DIR" --shell /sbin
 install -d -o root -g root "$APP_DIR" "$APP_DIR/releases"
 install -d -o sayab -g sayab /var/log/sayab
 
-# Fetch + install the release (skipped if already unpacked).
-if [ ! -d "$APP_DIR/releases/$REL_ID" ]; then
+# Fetch + install the release. A venv embeds its own absolute path, so it must be
+# built in its final location; a ".complete" marker makes a half-built dir (e.g.
+# a boot interrupted mid-install) get redone instead of trusted.
+DEST="$APP_DIR/releases/$REL_ID"
+if [ ! -f "$DEST/.complete" ]; then
+  rm -rf "$DEST"
   TMP="$(mktemp -d)"
   aws s3 cp "s3://$BUCKET/$RELEASE_KEY" "$TMP/release.tar.gz" --region "$REGION"
-  mkdir -p "$APP_DIR/releases/$REL_ID.tmp"
-  tar -xzf "$TMP/release.tar.gz" -C "$APP_DIR/releases/$REL_ID.tmp"
-  python3.11 -m venv "$APP_DIR/releases/$REL_ID.tmp/venv"
-  "$APP_DIR/releases/$REL_ID.tmp/venv/bin/pip" install --no-cache-dir -r "$APP_DIR/releases/$REL_ID.tmp/requirements.txt"
-  mv "$APP_DIR/releases/$REL_ID.tmp" "$APP_DIR/releases/$REL_ID"
+  mkdir -p "$DEST"
+  tar -xzf "$TMP/release.tar.gz" -C "$DEST"
+  python3.11 -m venv "$DEST/venv"
+  "$DEST/venv/bin/pip" install --no-cache-dir -r "$DEST/requirements.txt"
+  touch "$DEST/.complete"
   rm -rf "$TMP"
 fi
 ln -sfn "$APP_DIR/releases/$REL_ID" "$APP_DIR/current"
