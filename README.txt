@@ -16,7 +16,7 @@ How it runs on AWS
 A load balancer receives web traffic and passes it to one small server (a t4g.micro on Spot pricing). If the server dies or fails its health check, AWS starts a replacement. Nobody can log in over SSH. Access is through AWS Systems Manager. Logs go to CloudWatch, one setting is read from AWS Parameter Store, and there are two alarms.
 
 How updates happen
-Pushing to prod-hardening makes GitHub run the tests, build a small package, log in to AWS without any stored passwords, upload the package, run Terraform to update the setup, swap in a new server before removing the old one, and then test the live address.
+Pushing code only runs the checks: style, the automatic tests, and a syntax check of the setup files. It never touches AWS, so it cannot deploy by accident. A deploy happens only when someone starts it by hand with: gh workflow run ci-deploy -R mabdullah679/sayab-ec2 --ref prod-hardening. That run logs in to AWS without stored passwords, uploads the package, updates the setup, swaps in a new server before removing the old one, and tests the live address.
 
 What went wrong on the way and how it was solved
 1. The first deploy failed because the account is not allowed more than 8 virtual CPUs on regular servers and other projects were using all of them. Solved by using Spot servers, which have their own allowance and cost less. The catch is that AWS can take a Spot server back.

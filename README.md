@@ -13,8 +13,9 @@ There is no separate requirements document; the behaviour is defined by `backend
                                logs -> CloudWatch Logs   config <- SSM Parameter Store
                                access: SSM Session Manager (no port 22)
 
- git push prod-hardening
-   -> GitHub Actions: ruff + pytest + terraform fmt/validate
+ git push / pull request -> GitHub Actions: ruff + pytest + terraform fmt/validate (no AWS)
+
+ gh workflow run ci-deploy --ref prod-hardening   (workflow_dispatch = the only deploy trigger)
    -> OIDC (no AWS keys) -> upload release tarball to S3 -> terraform plan -> apply
    -> ASG instance refresh (launch new, then retire old) -> smoke test against the ALB URL
 ```
@@ -36,10 +37,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 cd backend && ../.venv/bin/python app.py        # http://127.0.0.1:5000
 ```
 
-Deploy (once, then on every push to `prod-hardening`):
+Deploy (pushes never deploy; only a manual workflow run does):
 
 1. Bootstrap (local state, run by a human once): `terraform -chdir=infra/bootstrap init && terraform -chdir=infra/bootstrap apply`. Creates the state bucket, the release bucket and the GitHub OIDC deploy role.
-2. Push to `prod-hardening`, or run `gh workflow run ci-deploy -R mabdullah679/sayab-ec2 --ref prod-hardening`.
+2. Run `gh workflow run ci-deploy -R mabdullah679/sayab-ec2 --ref prod-hardening`.
 3. The pipeline prints the URL in the `deploy` job (`terraform output url`) and the `smoke` job checks it.
 
 Override: the GitHub trust policy only allows branch `prod-hardening`; change `github_branch` in `infra/bootstrap/main.tf` to deploy from another branch. If On-Demand vCPU quota is available, set `use_spot=false` in `infra/variables.tf`.

@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     branches: [prod-hardening]
-  workflow_dispatch:
+  workflow_dispatch: # the only trigger that deploys
 
 permissions:
   contents: read
@@ -59,7 +59,7 @@ jobs:
       - run: terraform -chdir=infra validate
 
   deploy:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/prod-hardening'
     needs: [test, terraform-checks]
     runs-on: ubuntu-latest
     permissions:
@@ -107,6 +107,7 @@ jobs:
         run: echo "url=$(terraform -chdir=infra output -raw url)" >> "$GITHUB_OUTPUT"
 
   smoke:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/prod-hardening'
     needs: deploy
     runs-on: ubuntu-latest
     steps:
