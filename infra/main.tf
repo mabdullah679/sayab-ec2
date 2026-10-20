@@ -185,6 +185,17 @@ resource "aws_launch_template" "app" {
 
   monitoring { enabled = false }
 
+  # The shared account's On-Demand "Standard" vCPU quota (8) is fully used by
+  # other workloads, so On-Demand launches fail with VcpuLimitExceeded. Spot has
+  # its own quota and is ~70% cheaper; the ASG replaces the instance if reclaimed.
+  dynamic "instance_market_options" {
+    for_each = var.use_spot ? [1] : []
+    content {
+      market_type = "spot"
+      spot_options { spot_instance_type = "one-time" }
+    }
+  }
+
   user_data = base64encode(templatefile("${path.module}/scripts/user_data.sh.tftpl", {
     bucket      = var.artifact_bucket
     release_key = var.release_key

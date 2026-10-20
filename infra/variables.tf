@@ -24,3 +24,8 @@ variable "max_body_bytes" {
   type        = string
   default     = "4096"
 }
+variable "use_spot" {
+  description = "Run on Spot (own vCPU quota, cheaper). Set false for On-Demand when quota allows."
+  type        = bool
+  default     = true
+}
