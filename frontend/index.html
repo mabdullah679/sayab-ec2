@@ -4,17 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Welcome App</title>
+    <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
+    <div class="content">
     <h1>Welcome! Please enter your name:</h1>
     <form action="/submit" method="post">
-        <input type="text" name="user_name" placeholder="Your name here">
+        <input type="text" name="user_name" placeholder="Your name here" maxlength="60" aria-label="Your name">
         <button type="submit">Enter</button>
     </form>
+    </div>
     <footer>
         <p>© Mr. Muhammad Abdullah and Mrs. Ayesha Asim</p>
         <p>Welcoming Gift for Mr. Saad Ahmad and Mrs. Nayab Irfan</p>
     </footer>
 </body>
 </html>
-<!-- Comment -->

@@ -1,3 +1,21 @@
 venv/
+.venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+.ruff_cache/
+dist/
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+# Never commit machine home-directory debris or keys
+.ssh/
+.npm/
+.cache/
+.local/
+.bash_history
+*.pem
+id_*
+tfplan
