@@ -1,0 +1,116 @@
+#!/bin/bash
+# Idempotent bootstrap: safe to re-run (e.g. via SSM Run Command).
+set -euo pipefail
+exec > >(tee -a /var/log/sayab-bootstrap.log) 2>&1
+
+BUCKET="${bucket}"
+RELEASE_KEY="${release_key}"
+REGION="${region}"
+SSM_PATH="${ssm_path}"
+LOG_GROUP="${log_group}"
+APP_DIR=/opt/sayab
+REL_ID="$(basename "$RELEASE_KEY" .tar.gz)"
+
+dnf install -y python3.11 python3.11-pip amazon-cloudwatch-agent logrotate
+
+id sayab >/dev/null 2>&1 || useradd --system --home-dir "$APP_DIR" --shell /sbin/nologin sayab
+install -d -o root -g root "$APP_DIR" "$APP_DIR/releases"
+install -d -o sayab -g sayab /var/log/sayab
+
+# Fetch + install the release (skipped if already unpacked).
+if [ ! -d "$APP_DIR/releases/$REL_ID" ]; then
+  TMP="$(mktemp -d)"
+  aws s3 cp "s3://$BUCKET/$RELEASE_KEY" "$TMP/release.tar.gz" --region "$REGION"
+  mkdir -p "$APP_DIR/releases/$REL_ID.tmp"
+  tar -xzf "$TMP/release.tar.gz" -C "$APP_DIR/releases/$REL_ID.tmp"
+  python3.11 -m venv "$APP_DIR/releases/$REL_ID.tmp/venv"
+  "$APP_DIR/releases/$REL_ID.tmp/venv/bin/pip" install --no-cache-dir -r "$APP_DIR/releases/$REL_ID.tmp/requirements.txt"
+  mv "$APP_DIR/releases/$REL_ID.tmp" "$APP_DIR/releases/$REL_ID"
+  rm -rf "$TMP"
+fi
+ln -sfn "$APP_DIR/releases/$REL_ID" "$APP_DIR/current"
+echo "$REL_ID" > "$APP_DIR/RELEASE"
+
+# Runtime config from SSM Parameter Store -> env file (not world readable).
+umask 077
+: > /etc/sayab.env
+aws ssm get-parameters-by-path --path "$SSM_PATH" --region "$REGION" \
+  --query 'Parameters[].[Name,Value]' --output text | while read -r name value; do
+  echo "$(basename "$name")=$value" >> /etc/sayab.env
+done
+echo "HOST=0.0.0.0" >> /etc/sayab.env
+chmod 640 /etc/sayab.env; chgrp sayab /etc/sayab.env
+umask 022
+
+cat > /etc/systemd/system/sayab.service <<'UNIT'
+[Unit]
+Description=Sayab welcome app (gunicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=sayab
+Group=sayab
+EnvironmentFile=/etc/sayab.env
+WorkingDirectory=/opt/sayab/current/backend
+ExecStart=/opt/sayab/current/venv/bin/gunicorn --bind 0.0.0.0:8000 --workers 2 \
+  --graceful-timeout 20 --timeout 30 --access-logfile - --error-logfile - app:app
+Restart=always
+RestartSec=2
+KillSignal=SIGTERM
+TimeoutStopSec=30
+StandardOutput=append:/var/log/sayab/app.log
+StandardError=append:/var/log/sayab/app.log
+# Sandbox + resource limits
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+MemoryMax=400M
+TasksMax=64
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+cat > /etc/logrotate.d/sayab <<'LR'
+/var/log/sayab/app.log {
+  daily
+  rotate 3
+  compress
+  copytruncate
+  missingok
+  notifempty
+}
+LR
+
+cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<CW
+{
+  "agent": { "run_as_user": "root" },
+  "logs": { "logs_collected": { "files": { "collect_list": [
+    { "file_path": "/var/log/sayab/app.log", "log_group_name": "$LOG_GROUP", "log_stream_name": "{instance_id}/app" },
+    { "file_path": "/var/log/sayab-bootstrap.log", "log_group_name": "$LOG_GROUP", "log_stream_name": "{instance_id}/bootstrap" }
+  ] } } }
+}
+CW
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s \
+  -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+
+systemctl daemon-reload
+systemctl enable sayab.service
+systemctl restart sayab.service
+
+# Fail the bootstrap loudly if the app does not come up.
+for i in $(seq 1 30); do
+  curl -fsS http://127.0.0.1:8000/readyz >/dev/null && { echo "sayab ready ($REL_ID)"; exit 0; }
+  sleep 2
+done
+echo "sayab failed to become ready" >&2
+journalctl -u sayab --no-pager | tail -30 >&2
+exit 1

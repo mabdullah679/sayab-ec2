@@ -18,3 +18,4 @@ dist/
 .bash_history
 *.pem
 id_*
+tfplan

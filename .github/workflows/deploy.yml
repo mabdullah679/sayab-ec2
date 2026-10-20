@@ -1,0 +1,117 @@
+name: ci-deploy
+
+on:
+  pull_request:
+  push:
+    branches: [prod-hardening]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-southeast-2
+  ROLE_ARN: arn:aws:iam::346208529954:role/pf-sayab-ec2-github-deploy
+  ARTIFACT_BUCKET: pf-sayab-ec2-artifacts-346208529954
+  TF_VERSION: 1.12.2
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: pytest -q
+      - name: Guard against committed secrets / home-dir debris
+        run: |
+          bad=$(git ls-files | grep -E '(^|/)(\.ssh|\.npm|\.cache|\.local)/|(^|/)id_(rsa|ed25519)|\.pem$|\.bash_history$' || true)
+          if [ -n "$bad" ]; then echo "Forbidden files tracked:"; echo "$bad"; exit 1; fi
+      - name: Build release tarball
+        run: |
+          mkdir -p dist
+          tar -czf "dist/${GITHUB_SHA}.tar.gz" backend frontend requirements.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: dist/${{ github.sha }}.tar.gz
+          if-no-files-found: error
+
+  terraform-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - run: terraform -chdir=infra fmt -check -recursive
+      - run: terraform -chdir=infra init -backend=false -input=false
+      - run: terraform -chdir=infra validate
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: [test, terraform-checks]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # OIDC: no stored AWS keys
+      contents: read
+    outputs:
+      url: ${{ steps.out.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: dist
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Assert AWS account
+        run: |
+          acct=$(aws sts get-caller-identity --query Account --output text)
+          [ "$acct" = "346208529954" ] || { echo "wrong account"; exit 1; }
+      - name: Upload release
+        run: aws s3 cp "dist/${GITHUB_SHA}.tar.gz" "s3://${ARTIFACT_BUCKET}/releases/${GITHUB_SHA}.tar.gz"
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - run: terraform -chdir=infra init -input=false
+      - name: Plan
+        run: terraform -chdir=infra plan -input=false -out=tfplan -var "release_key=releases/${GITHUB_SHA}.tar.gz"
+      - name: Apply
+        run: terraform -chdir=infra apply -input=false tfplan
+      - name: Wait for instance refresh
+        run: |
+          asg=$(terraform -chdir=infra output -raw asg_name)
+          for i in $(seq 1 60); do
+            st=$(aws autoscaling describe-instance-refreshes --auto-scaling-group-name "$asg" \
+                 --query 'InstanceRefreshes[0].Status' --output text 2>/dev/null || echo None)
+            echo "instance refresh: $st"
+            case "$st" in Successful|None) exit 0;; Failed|Cancelled|RollbackSuccessful|RollbackFailed) exit 1;; esac
+            sleep 15
+          done
+          echo "timed out waiting for refresh"; exit 1
+      - id: out
+        run: echo "url=$(terraform -chdir=infra output -raw url)" >> "$GITHUB_OUTPUT"
+
+  smoke:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Smoke test the live URL
+        env:
+          URL: ${{ needs.deploy.outputs.url }}
+        run: bash scripts/smoke.sh "$URL"

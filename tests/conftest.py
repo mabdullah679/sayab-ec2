@@ -1,6 +1,5 @@
-import pytest
-
 import app as app_module
+import pytest
 
 
 @pytest.fixture()

@@ -3,6 +3,7 @@
 Configuration is read from the environment (see ``create_app``). The module
 exposes ``app`` for gunicorn (``gunicorn app:app``) and ``create_app`` for tests.
 """
+
 import json
 import logging
 import os
