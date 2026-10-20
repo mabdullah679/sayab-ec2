@@ -1,6 +1,6 @@
 data "aws_availability_zones" "available" { state = "available" }
 data "aws_caller_identity" "me" {}
-data "aws_iam_policy" "boundary" { name = "portfolio-ci-boundary" }
+data "aws_iam_policy" "boundary" { arn = "arn:aws:iam::346208529954:policy/portfolio-ci-boundary" }
 data "aws_ssm_parameter" "al2023" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
 }
