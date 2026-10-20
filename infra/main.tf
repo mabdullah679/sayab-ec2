@@ -8,6 +8,7 @@ data "aws_ssm_parameter" "al2023" {
 locals {
   azs        = slice(data.aws_availability_zones.available.names, 0, 2)
   ssm_prefix = "/${trimsuffix(var.name_prefix, "-")}/config"
+  tags       = { project = "portfolio", repo = "sayab-ec2", "managed-by" = "terraform" }
 }
 
 # ---------------------------------------------------------------- network
@@ -204,13 +205,14 @@ resource "aws_launch_template" "app" {
     log_group   = aws_cloudwatch_log_group.app.name
   }))
 
+  # default_tags do not reach instances launched by the ASG; tag them here.
   tag_specifications {
     resource_type = "instance"
-    tags          = { Name = "${var.name_prefix}app" }
+    tags          = merge(local.tags, { Name = "${var.name_prefix}app" })
   }
   tag_specifications {
     resource_type = "volume"
-    tags          = { Name = "${var.name_prefix}app" }
+    tags          = merge(local.tags, { Name = "${var.name_prefix}app" })
   }
 }
 
