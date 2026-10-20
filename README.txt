@@ -1,7 +1,7 @@
 SAYAB-EC2 IN PLAIN WORDS
 
 What this is
-A tiny website. You type your name, press Enter, and it shows a greeting. The original was a hobby project that only ran by hand on one computer. It is now set up to run on Amazon's cloud (AWS) and to update itself whenever new code is pushed to the branch called prod-hardening.
+A tiny personalized greeting website. You type your name, press Enter, and it shows a greeting. The original was a hobby project that only ran by hand on one computer. It is now set up to run on Amazon's cloud (AWS) and to update itself whenever new code is pushed to the branch called prod-hardening.
 
 Why the repository was so big
 Someone saved a whole home folder from a server into the repository by accident. That is about 11,200 files: download caches, bash history, and SSH keys. They have been removed from the current version and blocked from coming back. They are still in the old history. One of them is a private SSH key. It should be treated as stolen and replaced. The history was not rewritten.
@@ -33,9 +33,9 @@ Secure HTTPS (there is no domain or certificate, so it is plain HTTP), what happ
 Cost
 Roughly 4.5 US cents an hour, about 1 dollar 10 a day, mostly the load balancer. This is an estimate from published prices, not a bill.
 
-How to turn it off
-Run: terraform -chdir=infra destroy -var release_key=unused
-Then, last: terraform -chdir=infra/bootstrap destroy
+Status
+It was checked live on 2026-10-20 and then deleted the same day to save money. Nothing is running now. After deletion every lookup for the load balancer, server, network, storage buckets, roles, logs, alarms and settings found nothing, and the web address stopped answering. One free AWS-owned helper role (AWSServiceRoleForAutoScaling) was left behind on purpose.
 
 How to turn it back on
-After the one-time bootstrap: gh workflow run ci-deploy -R mabdullah679/sayab-ec2 --ref prod-hardening
+Step 1: terraform -chdir=infra/bootstrap init, then terraform -chdir=infra/bootstrap apply. This recreates the storage buckets and the deploy role.
+Step 2: gh workflow run ci-deploy -R mabdullah679/sayab-ec2 --ref prod-hardening. This runs the tests, builds the setup, deploys it and tests the live address.

@@ -17,9 +17,9 @@ def test_stylesheet_is_actually_served(client):
 
 
 def test_submit_greets_with_capitalised_name(client):
-    r = client.post("/submit", data={"user_name": "ayesha   asim"})
+    r = client.post("/submit", data={"user_name": "jane   doe"})
     assert r.status_code == 200
-    assert "Ayesha Asim" in r.get_data(as_text=True)
+    assert "Jane Doe" in r.get_data(as_text=True)
 
 
 def test_submit_blank_name_falls_back_to_guest(client):

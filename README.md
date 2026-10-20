@@ -1,6 +1,6 @@
 # sayab-ec2
 
-A small Flask web app (a "welcome" page that greets a visitor by name) hardened for production and deployed to AWS EC2 with Terraform and GitHub Actions.
+A small Flask web app (a personalized greeting page) hardened for production and deployed to AWS EC2 with Terraform and GitHub Actions.
 
 There is no separate requirements document; the behaviour is defined by `backend/app.py` and the tests in `tests/test_app.py`.
 
@@ -49,7 +49,7 @@ Override: the GitHub trust policy only allows branch `prod-hardening`; change `g
 | Action | Result |
 | --- | --- |
 | `GET /` | The name form (`frontend/index.html`) styled by `/static/styles.css` |
-| `POST /submit` with `user_name=ayesha asim` | HTML greeting containing `Ayesha Asim` |
+| `POST /submit` with `user_name=jane doe` | HTML greeting containing `Jane Doe` |
 | `POST /submit` with a blank name | Greets `Guest` |
 | `POST /submit` with HTML such as `<script>` | Output is escaped (previously reflected, a real XSS) |
 | `POST /submit` with a name over 60 characters or with control characters | `400` JSON error |
@@ -105,30 +105,24 @@ ruff check . && ruff format --check . && pytest -q
 
 ## Deployed on AWS
 
-Verified 2026-10-20 in account 346208529954, region ap-southeast-2, through GitHub Actions run 39395015892 (jobs test, terraform-checks, deploy, smoke all green; the deploy authenticated with OIDC, no stored keys).
+Verified live on 2026-10-20 (account 346208529954, region ap-southeast-2) through GitHub Actions run 39395015892, then torn down the same day to save cost. The stack is not running now.
 
-URL pattern: `http://pf-sayab-ec2-alb-<id>.ap-southeast-2.elb.amazonaws.com` (the live one was `http://pf-sayab-ec2-alb-1381512978.ap-southeast-2.elb.amazonaws.com`).
+What was observed while it was live, by curl against the ALB (`http://pf-sayab-ec2-alb-<id>.ap-southeast-2.elb.amazonaws.com`):
 
-Observed by curl against the ALB:
-
-- `GET /healthz` returned `200 {"status":"ok"}` with the security headers above and `Server: gunicorn`.
-- `GET /readyz` returned `{"status":"ready"}`.
-- `POST /submit user_name=ayesha asim` returned the greeting containing `Ayesha Asim`.
+- `GET /healthz` returned `200 {"status":"ok"}` with the security headers and `Server: gunicorn`; `GET /readyz` returned `{"status":"ready"}`.
+- `POST /submit user_name=jane doe` returned the greeting containing `Jane Doe`.
 - `scripts/smoke.sh` printed `SMOKE PASSED` (healthz, form, stylesheet, greeting, XSS escaped, overlong name 400, security headers).
+- The instance was a t4g.micro Spot instance with IMDSv2 required and an encrypted 8 GiB gp3 volume; JSON access logs reached the `/pf-sayab-ec2/app` log group.
 
-Observed in AWS: the running instance is a t4g.micro Spot instance with IMDSv2 required (`HttpTokens=required`), an encrypted 8 GiB gp3 volume, and a log stream `<instance-id>/app` in `/pf-sayab-ec2/app` containing the JSON access logs.
+Never established: HTTPS, Spot reclaim behaviour, alarm delivery (the SNS topic had no subscribers), and browser rendering.
 
-Not established: HTTPS, Spot reclaim behaviour (never triggered), the SNS alarm topic delivering to anyone (it has no subscribers), and visual rendering in a browser (curl only; the page was not opened in a browser).
+Resources (28 in `infra/`, all `pf-sayab-ec2-*`, tagged `project=portfolio`, `repo=sayab-ec2`, `managed-by=terraform`): VPC, 2 subnets, internet gateway, route table and associations, 2 security groups and 5 rules, ALB, target group, listener, launch template, ASG, instance role/profile/policies, SSM parameter, log group, SNS topic, 2 alarms. Bootstrap added 2 S3 buckets and the deploy role. Cost while up was about US$0.045 per hour (estimate from published prices, not an invoice).
 
-Resources (28 managed by `infra/`, all named `pf-sayab-ec2-*` and tagged `project=portfolio`, `repo=sayab-ec2`, `managed-by=terraform`): VPC, 2 subnets, internet gateway, route table + 2 associations, 2 security groups + 5 rules, ALB, target group, listener, launch template, ASG, instance role + profile + 2 managed-policy attachments + inline policy, SSM parameter, log group (14-day retention), SNS topic, 2 CloudWatch alarms. Bootstrap adds 2 S3 buckets, their config, and the deploy role.
+Teardown, done 2026-10-20: `terraform -chdir=infra destroy -var release_key=unused`, then `terraform -chdir=infra/bootstrap destroy`. Afterwards, direct lookups for the ALB, target group, ASG, launch template, instances, VPC, security groups, S3 buckets, IAM roles and profiles, log groups, alarms, SNS topics and SSM parameters all returned 0, and the URL no longer responded. The AWS-managed service-linked role `AWSServiceRoleForAutoScaling` (created on first use) was left in place; it is shared and free.
 
-Cost (estimate from published on-demand/Spot prices, not an invoice): about US$0.045 per hour, roughly $1.1 per day, dominated by the ALB (~$0.025-0.034) and three public IPv4 addresses (~$0.015).
-
-Teardown (to stop cost), in this order:
+Rebuild:
 
 ```
-terraform -chdir=infra destroy -var release_key=unused     # needs the pf-sayab-ec2-tfstate bucket
-terraform -chdir=infra/bootstrap destroy                    # last: state + release buckets, deploy role
+terraform -chdir=infra/bootstrap init && terraform -chdir=infra/bootstrap apply   # recreates state bucket, release bucket, deploy role
+gh workflow run ci-deploy -R mabdullah679/sayab-ec2 --ref prod-hardening          # tests, plan, apply, smoke test
 ```
-
-Rebuild with one command after step 1 of "Run it" exists: `gh workflow run ci-deploy -R mabdullah679/sayab-ec2 --ref prod-hardening`.

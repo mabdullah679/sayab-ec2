@@ -16,7 +16,7 @@ check() { # description, expected substring, actual
 check "healthz"        '"status":"ok"'  "$(curl -fsS "$URL/healthz" | tr -d ' \n')"
 check "home form"      'name="user_name"' "$(curl -fsS "$URL/")"
 check "stylesheet"     'background-color' "$(curl -fsS "$URL/static/styles.css")"
-check "greeting"       'Ayesha Asim'    "$(curl -fsS -d 'user_name=ayesha asim' "$URL/submit")"
+check "greeting"       'Jane Doe'    "$(curl -fsS -d 'user_name=jane doe' "$URL/submit")"
 body=$(curl -fsS -d 'user_name=<script>x</script>' "$URL/submit")
 case "$body" in *"<script>x"*) echo "FAIL xss reflected"; exit 1;; *) echo "ok   xss escaped";; esac
 code=$(curl -s -o /dev/null -w '%{http_code}' -d "user_name=$(printf 'a%.0s' $(seq 1 61))" "$URL/submit")
