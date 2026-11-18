@@ -72,7 +72,7 @@ What $0 means here (published free-tier figures, not an invoice, not verified ag
 - Beyond that you pay per request and per GB-second. `reserved_concurrent_executions = 5` caps parallelism (extra requests get 429), which bounds but does not zero the spend. Function URLs have no charge of their own.
 - CloudWatch Logs has its own free allowance (about 5 GB ingestion per month); the 7-day retention keeps storage small. Outbound data transfer has a free monthly allowance (about 100 GB, shared across the account).
 - Not covered: a custom domain, WAF, or alarms (each would cost money or need extra setup). There is no rate limit besides the concurrency cap; a public URL can be hit by anyone.
-- Risk to check before apply: reserving concurrency must leave the account's unreserved concurrency at 10 or more. A new or restricted account with a low Lambda concurrency quota can reject `reserved_concurrency = 5`; delete the `reserved_concurrent_executions` line or lower it. The org SCP/quota notes in the owner's memory were not consulted against this.
+- Risk to check before apply: reserving concurrency must leave the account's unreserved concurrency at 10 or more. A new or restricted account with a low Lambda concurrency quota can reject `reserved_concurrency = 5`; delete the `reserved_concurrent_executions` line or lower it. The account's real Lambda quota was not checked.
 - This stack uses AWS provider `~> 6.0` (needs `invoked_via_function_url`); the EC2 stack stays on `~> 5.80`.
 
 ## What it does
