@@ -65,6 +65,16 @@ jobs:
       - run: terraform -chdir=infra/lambda init -backend=false -input=false
       - run: terraform -chdir=infra/lambda validate
 
+  terraform-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - name: Offline terraform test (mock_provider, no AWS)
+        run: bash scripts/tf_test.sh
+
   secrets-scan:
     runs-on: ubuntu-latest
     permissions:

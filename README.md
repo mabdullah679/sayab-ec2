@@ -45,19 +45,19 @@ Deploy (pushes never deploy; only a manual workflow run does):
 
 Override: the GitHub trust policy only allows branch `prod-hardening`; change `github_branch` in `infra/bootstrap/main.tf` to deploy from another branch. If On-Demand vCPU quota is available, set `use_spot=false` in `infra/variables.tf`.
 
-## Free hosting path: AWS Lambda + Function URL (added 2026-11-18, prepared, not deployed)
+## Free hosting path: AWS Lambda + Function URL (added 2026-11-18, LIVE since 2026-11-18)
 
-The same Flask app also runs on Lambda behind a Function URL, an additional path that leaves the EC2/ALB stack untouched. Adapter: `apig-wsgi` 2.20.0 (pure Python, one dependency, speaks Function URL payload v2, no layer or extension needed; Lambda Web Adapter was rejected because it needs a layer ARN and a gunicorn process for no gain here).
+The same Flask app also runs on Lambda behind a Function URL, an additional path that leaves the EC2/ALB stack untouched. It is deployed and live (account 025066259864, ap-southeast-2, applied 2026-11-18): https://hti5gehhgooawm33auws625esm0vbymx.lambda-url.ap-southeast-2.on.aws/ . The old EC2/ALB stack in `infra/` stays torn down (2026-10-20). Adapter: `apig-wsgi` 2.20.0 (pure Python, one dependency, speaks Function URL payload v2, no layer or extension needed; Lambda Web Adapter was rejected because it needs a layer ARN and a gunicorn process for no gain here).
 
 ```
  browser --HTTPS--> Lambda Function URL (auth NONE, public demo) -> Lambda python3.12 arm64
                     handler lambda_handler.handler -> apig-wsgi -> Flask (backend/app.py)
-                    logs -> CloudWatch Logs (7-day retention)   reserved concurrency = 5
+                    logs -> CloudWatch Logs (7-day retention)   reserved concurrency = -1 (unreserved)
 ```
 
-Files: `backend/lambda_handler.py`, `scripts/build_lambda.sh` (builds `dist/lambda.zip` with app, `templates/`, `frontend/` and arm64 deps from `requirements-lambda.txt`), `infra/lambda/` (function, URL, logging-only IAM role, log group, outputs `url`; local state, no backend), tests `tests/test_lambda_handler.py` (14, Function URL v2 events) and `tests/test_lambda_zip.py` (3, plus 1 that runs only against a full build via `LAMBDA_ZIP`).
+Files: `backend/lambda_handler.py`, `scripts/build_lambda.sh` (builds `dist/lambda.zip` with app, `templates/`, `frontend/` and arm64 deps from `requirements-lambda.txt`), `infra/lambda/` (parent module composing three child modules, see below; local state, no backend), tests `tests/test_lambda_handler.py` (14, Function URL v2 events) and `tests/test_lambda_zip.py` (3, plus 1 that runs only against a full build via `LAMBDA_ZIP`).
 
-Deploy (owner runs this later; needs AWS credentials, none were used to prepare it):
+Deploy / re-apply (owner runs this; needs AWS credentials, none were used to prepare the module refactor):
 
 ```
 bash scripts/build_lambda.sh
@@ -65,14 +65,27 @@ terraform -chdir=infra/lambda init && terraform -chdir=infra/lambda apply
 curl "$(terraform -chdir=infra/lambda output -raw url)readyz"
 ```
 
-Destroy: `terraform -chdir=infra/lambda destroy`. State is a local `terraform.tfstate` in `infra/lambda/` (gitignored); keep it until destroy, or the resources are orphaned.
+Destroy (teardown): `terraform -chdir=infra/lambda destroy`. State is a local `terraform.tfstate` in `infra/lambda/` on the owner's laptop (gitignored). It is NOT backed up and has no remote backend or lock: if the file is lost, the live resources are orphaned and must be imported or deleted by hand.
+
+Module layout of `infra/lambda/` (refactored from one flat root; behavior identical, no resource recreated):
+
+| Path | Role |
+|---|---|
+| `main.tf` | Parent: calls the three modules below |
+| `modules/log_group` | CloudWatch log group `/aws/lambda/<name>`, 7-day retention |
+| `modules/exec_role` | IAM role `<name>-exec` + inline `logs-only` policy (CreateLogStream/PutLogEvents on that log group only) |
+| `modules/function_url` | Lambda function, Function URL (auth NONE), the two public-invoke permissions |
+| `moved.tf` | `moved {}` blocks: old flat addresses -> module addresses, so the existing state migrates with no destroy/create |
+| `tests/`, `modules/*/tests/` | Native `terraform test` files using `mock_provider` (no AWS); run all with `bash scripts/tf_test.sh` |
+
+Migration note: against a copy of the live state, `plan -refresh=false` (offline, dummy credentials) shows the 7 resources as moved and `Plan: 0 to add, 0 to change, 0 to destroy`. That is an offline proof against the state file only; run the real `terraform plan` (it must show the same) before the first `apply` of this layout. Data sources (`aws_iam_policy_document`) cannot be moved; they are re-read.
 
 What $0 means here (published free-tier figures, not an invoice, not verified against the account):
 - Lambda always-free: 1,000,000 requests and 400,000 GB-seconds per month. At 256 MB that is about 1.6M seconds of execution; a request here takes milliseconds, so the 1M requests is the binding limit.
-- Beyond that you pay per request and per GB-second. `reserved_concurrent_executions = 5` caps parallelism (extra requests get 429), which bounds but does not zero the spend. Function URLs have no charge of their own.
+- Beyond that you pay per request and per GB-second. `reserved_concurrency` defaults to -1 (unreserved), so there is no concurrency cap; set it to 0 or above to cap parallelism (extra requests get 429), which would bound but not zero the spend. Function URLs have no charge of their own.
 - CloudWatch Logs has its own free allowance (about 5 GB ingestion per month); the 7-day retention keeps storage small. Outbound data transfer has a free monthly allowance (about 100 GB, shared across the account).
 - Not covered: a custom domain, WAF, or alarms (each would cost money or need extra setup). There is no rate limit besides the concurrency cap; a public URL can be hit by anyone.
-- Risk to check before apply: reserving concurrency must leave the account's unreserved concurrency at 10 or more. A new or restricted account with a low Lambda concurrency quota can reject `reserved_concurrency = 5`; delete the `reserved_concurrent_executions` line or lower it. The account's real Lambda quota was not checked.
+- Concurrency: this account's total Lambda concurrency limit is 10 and AWS requires at least 10 unreserved, so reserving 5 is rejected (verified 2026-11-18). The default is therefore -1 (unreserved); override with `-var reserved_concurrency=N` only if the account limit is raised.
 - This stack uses AWS provider `~> 6.0` (needs `invoked_via_function_url`); the EC2 stack stays on `~> 5.80`.
 
 ## What it does
@@ -121,6 +134,7 @@ ruff check . && ruff format --check . && pytest -q
 | `infra/main.tf`, `variables.tf`, `versions.tf`, `outputs.tf` | VPC, SGs, ALB, ASG, launch template, IAM, SSM, CloudWatch |
 | `infra/scripts/user_data.sh.tftpl` | Idempotent instance bootstrap (install, systemd unit, CloudWatch agent) |
 | `backend/lambda_handler.py`, `scripts/build_lambda.sh`, `requirements-lambda.txt`, `infra/lambda/` | Lambda free path (see above) |
+| `scripts/tf_test.sh` | Offline `terraform test` for the Lambda modules (also the `terraform-tests` CI job) |
 | `infra/bootstrap/main.tf` | One-time state bucket, release bucket, OIDC deploy role |
 | `.github/workflows/deploy.yml` | CI/CD pipeline (actions pinned to commit SHAs) |
 | `CLAUDE.md` | Repo-specific notes for AI coding sessions |
