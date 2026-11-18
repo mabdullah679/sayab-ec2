@@ -2,7 +2,7 @@
 
 Global working rules: `~/.claude/CLAUDE.md` (read it; not copied here). This file is repo-specific only.
 
-## Commands (verified 2026-11-18, Python 3.12 locally, CI uses 3.11)
+## Commands (ruff/pytest run locally 2026-11-18 on Python 3.12; CI uses 3.11; the terraform line runs in CI only, terraform is not installed on the owner machine)
 
 ```
 python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
