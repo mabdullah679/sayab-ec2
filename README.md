@@ -13,7 +13,7 @@ There is no separate requirements document; the behaviour is defined by `backend
                                logs -> CloudWatch Logs   config <- SSM Parameter Store
                                access: SSM Session Manager (no port 22)
 
- git push / pull request -> GitHub Actions: ruff + pytest + terraform fmt/validate (no AWS)
+ git push / pull request -> GitHub Actions: ruff + pytest + terraform fmt/validate + gitleaks (no AWS)
 
  gh workflow run ci-deploy --ref prod-hardening   (workflow_dispatch = the only deploy trigger)
    -> OIDC (no AWS keys) -> upload release tarball to S3 -> terraform plan -> apply
@@ -91,7 +91,8 @@ ruff check . && ruff format --check . && pytest -q
 | `infra/main.tf`, `variables.tf`, `versions.tf`, `outputs.tf` | VPC, SGs, ALB, ASG, launch template, IAM, SSM, CloudWatch |
 | `infra/scripts/user_data.sh.tftpl` | Idempotent instance bootstrap (install, systemd unit, CloudWatch agent) |
 | `infra/bootstrap/main.tf` | One-time state bucket, release bucket, OIDC deploy role |
-| `.github/workflows/deploy.yml` | CI/CD pipeline |
+| `.github/workflows/deploy.yml` | CI/CD pipeline (actions pinned to commit SHAs) |
+| `CLAUDE.md` | Repo-specific notes for AI coding sessions |
 | `scripts/smoke.sh` | Post-deploy checks against a URL |
 
 ## Design decisions

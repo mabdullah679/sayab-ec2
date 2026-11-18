@@ -1,7 +1,7 @@
 SAYAB-EC2 IN PLAIN WORDS
 
 What this is
-A tiny personalized greeting website. You type your name, press Enter, and it shows a greeting. The original was a hobby project that only ran by hand on one computer. It is now set up to run on Amazon's cloud (AWS) and to update itself whenever new code is pushed to the branch called prod-hardening.
+A tiny personalized greeting website. You type your name, press Enter, and it shows a greeting. The original was a hobby project that only ran by hand on one computer. It is now set up to run on Amazon's cloud (AWS) and to be deployed there by a manual button-press (a GitHub Actions run on the branch called prod-hardening). Pushing code alone never deploys it.
 
 Why the repository was so big
 Someone saved a whole home folder from a server into the repository by accident. That is about 11,200 files: download caches, bash history, and SSH keys. They have been removed from the current version and blocked from coming back. They are still in the old history. One of them is a private SSH key. It should be treated as stolen and replaced. The history was not rewritten.
@@ -16,7 +16,7 @@ How it runs on AWS
 A load balancer receives web traffic and passes it to one small server (a t4g.micro on Spot pricing). If the server dies or fails its health check, AWS starts a replacement. Nobody can log in over SSH. Access is through AWS Systems Manager. Logs go to CloudWatch, one setting is read from AWS Parameter Store, and there are two alarms.
 
 How updates happen
-Pushing code only runs the checks: style, the automatic tests, and a syntax check of the setup files. It never touches AWS, so it cannot deploy by accident. A deploy happens only when someone starts it by hand with: gh workflow run ci-deploy -R mabdullah679/sayab-ec2 --ref prod-hardening. That run logs in to AWS without stored passwords, uploads the package, updates the setup, swaps in a new server before removing the old one, and tests the live address.
+Pushing code only runs the checks: style, the automatic tests, a syntax check of the setup files, and a scan for leaked passwords or keys in new commits. It never touches AWS, so it cannot deploy by accident. A deploy happens only when someone starts it by hand with: gh workflow run ci-deploy -R mabdullah679/sayab-ec2 --ref prod-hardening. That run logs in to AWS without stored passwords, uploads the package, updates the setup, swaps in a new server before removing the old one, and tests the live address.
 
 What went wrong on the way and how it was solved
 1. The first deploy failed because the account is not allowed more than 8 virtual CPUs on regular servers and other projects were using all of them. Solved by using Spot servers, which have their own allowance and cost less. The catch is that AWS can take a Spot server back.
