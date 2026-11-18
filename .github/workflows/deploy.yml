@@ -33,6 +33,10 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest -q
+      - name: Build Lambda zip (full, with arm64 deps) and check its contents
+        run: |
+          bash scripts/build_lambda.sh
+          LAMBDA_ZIP=dist/lambda.zip pytest -q tests/test_lambda_zip.py
       - name: Guard against committed secrets / home-dir debris
         run: |
           bad=$(git ls-files | grep -E '(^|/)(\.ssh|\.npm|\.cache|\.local)/|(^|/)id_(rsa|ed25519)|\.pem$|\.bash_history$' || true)
@@ -57,6 +61,9 @@ jobs:
       - run: terraform -chdir=infra fmt -check -recursive
       - run: terraform -chdir=infra init -backend=false -input=false
       - run: terraform -chdir=infra validate
+      - run: terraform -chdir=infra/lambda fmt -check -recursive
+      - run: terraform -chdir=infra/lambda init -backend=false -input=false
+      - run: terraform -chdir=infra/lambda validate
 
   secrets-scan:
     runs-on: ubuntu-latest
