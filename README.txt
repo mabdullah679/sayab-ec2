@@ -30,6 +30,13 @@ The health pages answered OK, the greeting worked, a script-tag name was shown a
 What was NOT checked
 Secure HTTPS (there is no domain or certificate, so it is plain HTTP), what happens when AWS takes back the Spot server, whether anyone receives the alarm emails (nobody is subscribed), and how the page looks in a real browser (only command-line tests were used).
 
+Free hosting option on AWS Lambda (added 2026-11-18, prepared only, nothing deployed)
+The same website can also run on AWS Lambda, Amazon's pay-per-use code runner, with a public web address (a Function URL). It sits beside the existing server setup, which is untouched. A small helper library (apig-wsgi) lets the same Flask code answer Lambda requests. It was chosen over Lambda Web Adapter because that one needs an extra add-on layer and a server process.
+New files: backend/lambda_handler.py, scripts/build_lambda.sh (packs the app, pages and libraries into dist/lambda.zip), requirements-lambda.txt, and the infra/lambda folder (the setup files). 17 new automatic tests check the Lambda entry point and the contents of the zip.
+How to turn it on later (the owner runs this, it needs AWS login): bash scripts/build_lambda.sh, then terraform -chdir=infra/lambda init, then terraform -chdir=infra/lambda apply. The address is printed as "url". To remove it: terraform -chdir=infra/lambda destroy. Keep the local file infra/lambda/terraform.tfstate until you destroy.
+Why it is free: AWS gives every account 1 million Lambda requests and 400,000 GB-seconds of run time each month at no charge, with no expiry. This page needs only milliseconds per request, so the request count is the limit. Past that you pay a small amount per request. The setup caps parallel runs at 5 to limit cost, but that is a brake, not a zero. Logs are kept 7 days, and CloudWatch has its own small free allowance. These are published figures, not a bill, and were not checked against your account.
+Not covered: custom domain, firewall, alarms, and any rate limit beyond the cap of 5. One thing to check before applying: if the account allows very few Lambda runs at once, the cap of 5 can be refused; lower it or delete that line.
+
 Cost
 Roughly 4.5 US cents an hour, about 1 dollar 10 a day, mostly the load balancer. This is an estimate from published prices, not a bill.
 
