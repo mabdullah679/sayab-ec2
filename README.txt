@@ -1,7 +1,7 @@
 SAYAB-EC2 IN PLAIN WORDS
 
 What this is
-A tiny personalized greeting website. You type your name, press Enter, and it shows a greeting. The original was a hobby project that only ran by hand on one computer. It is now set up to run on Amazon's cloud (AWS) and to update itself whenever new code is pushed to the branch called prod-hardening.
+A tiny personalized greeting website. You type your name, press Enter, and it shows a greeting. The original was a hobby project that only ran by hand on one computer. It is now set up to run on Amazon's cloud (AWS) and to be deployed there by a manual button-press (a GitHub Actions run on the branch called prod-hardening). Pushing code alone never deploys it.
 
 Why the repository was so big
 Someone saved a whole home folder from a server into the repository by accident. That is about 11,200 files: download caches, bash history, and SSH keys. They have been removed from the current version and blocked from coming back. They are still in the old history. One of them is a private SSH key. It should be treated as stolen and replaced. The history was not rewritten.
@@ -16,7 +16,7 @@ How it runs on AWS
 A load balancer receives web traffic and passes it to one small server (a t4g.micro on Spot pricing). If the server dies or fails its health check, AWS starts a replacement. Nobody can log in over SSH. Access is through AWS Systems Manager. Logs go to CloudWatch, one setting is read from AWS Parameter Store, and there are two alarms.
 
 How updates happen
-Pushing code only runs the checks: style, the automatic tests, and a syntax check of the setup files. It never touches AWS, so it cannot deploy by accident. A deploy happens only when someone starts it by hand with: gh workflow run ci-deploy -R mabdullah679/sayab-ec2 --ref prod-hardening. That run logs in to AWS without stored passwords, uploads the package, updates the setup, swaps in a new server before removing the old one, and tests the live address.
+Pushing code only runs the checks: style, the automatic tests, a syntax check of the setup files, and a scan for leaked passwords or keys in new commits. It never touches AWS, so it cannot deploy by accident. A deploy happens only when someone starts it by hand with: gh workflow run ci-deploy -R mabdullah679/sayab-ec2 --ref prod-hardening. That run logs in to AWS without stored passwords, uploads the package, updates the setup, swaps in a new server before removing the old one, and tests the live address.
 
 What went wrong on the way and how it was solved
 1. The first deploy failed because the account is not allowed more than 8 virtual CPUs on regular servers and other projects were using all of them. Solved by using Spot servers, which have their own allowance and cost less. The catch is that AWS can take a Spot server back.
@@ -29,6 +29,13 @@ The health pages answered OK, the greeting worked, a script-tag name was shown a
 
 What was NOT checked
 Secure HTTPS (there is no domain or certificate, so it is plain HTTP), what happens when AWS takes back the Spot server, whether anyone receives the alarm emails (nobody is subscribed), and how the page looks in a real browser (only command-line tests were used).
+
+Free hosting option on AWS Lambda (added 2026-11-18, prepared only, nothing deployed)
+The same website can also run on AWS Lambda, Amazon's pay-per-use code runner, with a public web address (a Function URL). It sits beside the existing server setup, which is untouched. A small helper library (apig-wsgi) lets the same Flask code answer Lambda requests. It was chosen over Lambda Web Adapter because that one needs an extra add-on layer and a server process.
+New files: backend/lambda_handler.py, scripts/build_lambda.sh (packs the app, pages and libraries into dist/lambda.zip), requirements-lambda.txt, and the infra/lambda folder (the setup files). 17 new automatic tests check the Lambda entry point and the contents of the zip.
+How to turn it on later (the owner runs this, it needs AWS login): bash scripts/build_lambda.sh, then terraform -chdir=infra/lambda init, then terraform -chdir=infra/lambda apply. The address is printed as "url". To remove it: terraform -chdir=infra/lambda destroy. Keep the local file infra/lambda/terraform.tfstate until you destroy.
+Why it is free: AWS gives every account 1 million Lambda requests and 400,000 GB-seconds of run time each month at no charge, with no expiry. This page needs only milliseconds per request, so the request count is the limit. Past that you pay a small amount per request. The setup caps parallel runs at 5 to limit cost, but that is a brake, not a zero. Logs are kept 7 days, and CloudWatch has its own small free allowance. These are published figures, not a bill, and were not checked against your account.
+Not covered: custom domain, firewall, alarms, and any rate limit beyond the cap of 5. One thing to check before applying: if the account allows very few Lambda runs at once, the cap of 5 can be refused; lower it or delete that line.
 
 Cost
 Roughly 4.5 US cents an hour, about 1 dollar 10 a day, mostly the load balancer. This is an estimate from published prices, not a bill.
