@@ -7,13 +7,16 @@
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-    <div class="content">
-    <h1>Welcome! Please enter your name:</h1>
-    <form action="/submit" method="post">
-        <input type="text" name="user_name" placeholder="Your name here" maxlength="60" aria-label="Your name">
-        <button type="submit">Enter</button>
-    </form>
-    </div>
+    <main>
+        <div class="content">
+            <h1>Welcome! Please enter your name:</h1>
+            <p class="lede" id="what-this-is">A small Flask app on AWS Lambda that greets you by name.</p>
+            <form action="/submit" method="post">
+                <input type="text" name="user_name" placeholder="Your name here" maxlength="60" aria-label="Your name">
+                <button type="submit">Enter</button>
+            </form>
+        </div>
+    </main>
     <footer>
         <p>A small personalized greeting page.</p>
     </footer>
